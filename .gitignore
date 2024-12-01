@@ -39,3 +39,6 @@ data/gold/
 # IDE
 .idea/
 EOF
+
+#OS
+.DS_Store
