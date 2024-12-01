@@ -1,32 +1,16 @@
 from pyspark.sql import SparkSession
-import logging
-from pathlib import Path
 
-def create_spark_session(app_name: str = "local-etl") -> SparkSession:
-    logging.basicConfig(level=logging.INFO)
-    logger = logging.getLogger(__name__)
-
-    try:
-        spark = (SparkSession.builder
+def create_spark_session(app_name: str = "LocalETL") -> SparkSession:
+    """Create a Spark session configured for local file system operations."""
+    return (SparkSession.builder
             .appName(app_name)
-            .master("local[2]")
-            .config("spark.driver.memory", "4g")
-            .config("spark.sql.adaptive.enabled", "true")
-            .config("spark.local.dir", str(Path.home() / ".spark-temp"))
+            .master("local[*]")
+            .config("spark.sql.files.ignoreMissingFiles", "true")
+            .config("spark.sql.files.ignoreCorruptFiles", "true")
+            .config("spark.hadoop.fs.defaultFS", "file:///")
             .getOrCreate())
 
-        # Set log level
-        spark.sparkContext.setLogLevel("WARN")
-        logger.info("Spark session created successfully")
-        return spark
-
-    except Exception as e:
-        logger.error(f"Failed to create Spark session: {str(e)}")
-        raise
-
 def stop_spark_session(spark: SparkSession) -> None:
-    try:
+    """Safely stop the Spark session."""
+    if spark is not None:
         spark.stop()
-        logging.info("Spark session stopped successfully")
-    except Exception as e:
-        logging.error(f"Error stopping Spark session: {str(e)}")
