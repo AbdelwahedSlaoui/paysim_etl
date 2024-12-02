@@ -17,7 +17,7 @@ def test_data(tmp_path):
     return str(test_file), str(tmp_path)
 
 def test_etl_pipeline(test_data, monkeypatch):
-    """Test the complete ETL pipeline execution."""
+    """Test the complete ETL pipeline execution with behavioral analytics."""
     from flows.paysim_flow import etl_pipeline
     monkeypatch.setenv("PREFECT_API_URL", "")
 
@@ -34,9 +34,19 @@ def test_etl_pipeline(test_data, monkeypatch):
                 assert df.count() > 0
                 assert 'type' in df.columns
 
-                # Verify gold layer aggregations
+                # Verify gold layer behavioral analysis metrics
                 if 'gold' in layer:
-                    assert all(col in df.columns for col in
-                             ['total_amount', 'transaction_count'])
+                    expected_columns = [
+                        'type', 'transaction_count', 'avg_amount',
+                        'total_volume', 'avg_balance_impact',
+                        'median_amount', 'large_txn_threshold',
+                        'zero_balance_count', 'percentage_of_total'
+                    ]
+                    assert all(col in df.columns for col in expected_columns)
+
+                    # Basic sanity checks on behavioral metrics
+                    first_row = df.collect()[0]
+                    assert first_row['transaction_count'] > 0
+                    assert first_row['percentage_of_total'] == 100.0  # Single transaction type
     finally:
         spark.stop()
