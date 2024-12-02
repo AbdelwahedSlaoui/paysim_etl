@@ -16,18 +16,34 @@ def create_gold_layer(spark: SparkSession, input_path: str, output_path: str) ->
     df_behavior_analysis = df.groupBy("type").agg(
         # Volume metrics
         count("*").alias("transaction_count"),
-        round(avg("amount"), 2).alias("avg_amount"),
-        round(sum("amount"), 2).alias("total_volume"),
+        round(avg(col("amount") / 1000), 2).alias("avg_amount_k"),
+        round(sum(col("amount") / 1000000), 2).alias("total_volume_m"),
 
         # Balance impact analysis
-        round(avg(col("newbalanceOrig") - col("oldbalanceOrg")), 2).alias("avg_balance_impact"),
+        round(
+            avg((col("newbalanceOrig") - col("oldbalanceOrg")) /
+                when(col("oldbalanceOrg") != 0, col("oldbalanceOrg")).otherwise(1) * 100),
+            2
+        ).alias("avg_balance_change_pct"),
 
         # Transaction size distribution
-        round(percentile_approx("amount", 0.5), 2).alias("median_amount"),
-        round(percentile_approx("amount", 0.9), 2).alias("large_txn_threshold"),
+        round(percentile_approx("amount", 0.5) / 1000, 2).alias("median_amount_k"),
+        round(percentile_approx("amount", 0.9) / 1000, 2).alias("large_txn_threshold_k"),
 
         # Account behavior patterns
-        sum(when(col("oldbalanceOrg") == 0, 1).otherwise(0)).alias("zero_balance_count")
+        sum(when(col("oldbalanceOrg") == 0, 1).otherwise(0)).alias("zero_balance_count"),
+
+        # ratio metrics
+        round(
+            avg(when(col("amount") > 10000, 1).otherwise(0)) * 100,
+            2
+        ).alias("large_txn_ratio_pct"),
+
+        # Relative balance impact
+        round(
+            sum(col("amount")) / sum(col("oldbalanceOrg")),
+            4
+        ).alias("volume_to_balance_ratio")
     )
 
     # Add percentage distribution
