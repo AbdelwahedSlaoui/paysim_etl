@@ -2,6 +2,7 @@
 import sys
 from datetime import datetime
 
+
 def verify_environment():
     """Run a comprehensive check of all installed components."""
     start = datetime.now()
@@ -10,6 +11,7 @@ def verify_environment():
     # Core Components
     try:
         import prefect
+
         results.append(f"✓ Prefect {prefect.__version__}")
     except ImportError as e:
         results.append(f"⚠️ Prefect import failed: {str(e)}")
@@ -27,6 +29,7 @@ def verify_environment():
 
     try:
         import duckdb
+
         results.append(f"✓ DuckDB {duckdb.__version__}")
     except ImportError as e:
         results.append(f"⚠️ DuckDB import failed: {str(e)}")
@@ -35,7 +38,10 @@ def verify_environment():
     try:
         import pytest
         import great_expectations as ge
-        results.append(f"✓ Testing tools (pytest {pytest.__version__}, great_expectations {ge.__version__})")
+
+        results.append(
+            f"✓ Testing tools (pytest {pytest.__version__}, great_expectations {ge.__version__})"
+        )
     except ImportError as e:
         results.append(f"⚠️ Testing tools import failed: {str(e)}")
 
@@ -45,6 +51,7 @@ def verify_environment():
         import isort
         import ruff
         import mypy
+
         results.append("✓ Development tools (black, isort, ruff, mypy)")
     except ImportError as e:
         results.append(f"⚠️ Development tools import failed: {str(e)}")
@@ -58,6 +65,7 @@ def verify_environment():
     duration = datetime.now() - start
     print(f"\nPython version: {sys.version.split()[0]}")
     print(f"Verification completed in {duration.total_seconds():.2f}s")
+
 
 if __name__ == "__main__":
     verify_environment()

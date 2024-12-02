@@ -2,12 +2,14 @@ import pytest
 from src.utils.spark_setup import create_spark_session
 from src.transformations.bronze import create_bronze_layer
 
+
 @pytest.fixture(scope="session")
 def spark():
     """Create a Spark session that will be used for all tests."""
     spark = create_spark_session("TestETL")
     yield spark
     spark.stop()
+
 
 @pytest.fixture
 def test_paths(tmp_path):
@@ -22,6 +24,7 @@ def test_paths(tmp_path):
     output_dir.mkdir()
 
     return test_file, output_dir
+
 
 def test_create_bronze_layer(spark, test_paths):
     """Test the basic functionality of create_bronze_layer."""

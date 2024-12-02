@@ -1,6 +1,7 @@
 from great_expectations.core import ExpectationConfiguration, ExpectationSuite
 from great_expectations.dataset import SparkDFDataset
 
+
 def validate_transaction_types(df) -> bool:
     """
     Validate that all transaction types are present in the DataFrame.
@@ -13,7 +14,7 @@ def validate_transaction_types(df) -> bool:
     suite.add_expectation(
         ExpectationConfiguration(
             expectation_type="expect_column_values_to_not_be_null",
-            kwargs={"column": "type"}
+            kwargs={"column": "type"},
         )
     )
 
