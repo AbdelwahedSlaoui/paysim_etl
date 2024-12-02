@@ -26,7 +26,7 @@ def process_layer(layer_name: str, transform_func, input_path: str, base_path: s
         stop_spark_session(spark)
 
 @flow
-def etl_pipeline(input_path: str = RAW_FILE_PATH) -> dict:
+def paysim_pipeline(input_path: str = RAW_FILE_PATH) -> dict:
     """Execute the full ETL pipeline from raw data to gold layer."""
     start_time = datetime.now()
     base_path = str(Path("data").absolute())
@@ -46,7 +46,7 @@ def etl_pipeline(input_path: str = RAW_FILE_PATH) -> dict:
 
 if __name__ == "__main__":
     print("Starting ETL pipeline execution...")
-    result = etl_pipeline()
+    result = paysim_pipeline()
 
     print(f"\nPipeline completed in {result['duration']}")
     print("\nOutput locations:")
