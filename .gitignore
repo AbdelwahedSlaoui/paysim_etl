@@ -22,6 +22,7 @@ wheels/
 
 # VS Code
 .vscode/
+*.log
 
 # Environment
 .env
