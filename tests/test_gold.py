@@ -1,5 +1,6 @@
 import pytest
 from pyspark.sql.types import StructType, StructField, StringType, DoubleType
+from pyspark.sql.functions import col
 
 
 @pytest.fixture(scope="session")
@@ -12,17 +13,23 @@ def spark():
 
 
 def test_create_gold_layer(spark, tmp_path):
-    """Test gold layer aggregations with minimal test data."""
+    """Test gold layer behavioral analysis with representative test data."""
     from src.transformations.gold import create_gold_layer
 
-    # Create test data
-    data = [("PAYMENT", 100.0), ("PAYMENT", 200.0)]
-    schema = StructType(
-        [
-            StructField("type", StringType(), True),
-            StructField("amount", DoubleType(), True),
-        ]
-    )
+    # Create test data with balance information
+    data = [
+        # type, amount, oldbalanceOrg, newbalanceOrig
+        ("PAYMENT", 100.0, 500.0, 400.0),    # Regular payment
+        ("PAYMENT", 200.0, 400.0, 200.0),    # Another payment
+        ("PAYMENT", 150.0, 0.0, 0.0)         # Zero-balance payment
+    ]
+
+    schema = StructType([
+        StructField("type", StringType(), True),
+        StructField("amount", DoubleType(), True),
+        StructField("oldbalanceOrg", DoubleType(), True),
+        StructField("newbalanceOrig", DoubleType(), True)
+    ])
 
     # Setup and process
     input_path = f"{tmp_path}/silver"
@@ -32,8 +39,13 @@ def test_create_gold_layer(spark, tmp_path):
     row_count = create_gold_layer(spark, input_path, output_path)
     result = spark.read.parquet(output_path).collect()[0]
 
-    # Verify core functionality
-    assert row_count == 1
+    # Verify behavioral analysis metrics
+    assert row_count == 1  # One group (PAYMENT type)
     assert result["type"] == "PAYMENT"
-    assert pytest.approx(result["total_amount"]) == 300.0
-    assert result["transaction_count"] == 2
+    assert result["transaction_count"] == 3
+    assert pytest.approx(result["avg_amount"]) == 150.0
+    assert pytest.approx(result["total_volume"]) == 450.0
+    assert pytest.approx(result["avg_balance_impact"]) == -100.0  # Average balance reduction
+    assert pytest.approx(result["median_amount"]) == 150.0
+    assert result["zero_balance_count"] == 1  # One zero-balance transaction
+    assert pytest.approx(result["percentage_of_total"]) == 100.0  # All transactions are PAYMENT
