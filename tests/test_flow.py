@@ -18,11 +18,11 @@ def test_data(tmp_path):
 
 def test_etl_pipeline(test_data, monkeypatch):
     """Test the complete ETL pipeline execution with behavioral analytics."""
-    from flows.paysim_flow import etl_pipeline
+    from flows.paysim_flow import paysim_pipeline
     monkeypatch.setenv("PREFECT_API_URL", "")
 
     input_file, base_dir = test_data
-    result = etl_pipeline(input_file)
+    result = paysim_pipeline(input_file)
 
     # Verify outputs with PySpark
     spark = SparkSession.builder.appName("TestPipeline").getOrCreate()

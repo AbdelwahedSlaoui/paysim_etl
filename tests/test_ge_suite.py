@@ -1,7 +1,7 @@
 import pytest
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType, StructField, StringType, DoubleType, IntegerType
-from quality.expectations.basic_suite import validate_transaction_types
+from quality.expectations.ge_suite import validate_transaction_types
 
 @pytest.fixture
 def spark():
