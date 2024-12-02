@@ -1,16 +1,37 @@
 from prefect import flow, task
-from pyspark.sql import SparkSession
+from datetime import datetime, timedelta
+import smtplib
+from email.message import EmailMessage
 from pathlib import Path
-from datetime import datetime
 
 from src.utils.spark_setup import create_spark_session, stop_spark_session
 from src.transformations.bronze import create_bronze_layer
 from src.transformations.silver import create_silver_layer
 from src.transformations.gold import create_gold_layer
 
-@task
+def send_notification(subject: str, message: str) -> None:
+    """Simple notification function using standard Python email."""
+    try:
+        msg = EmailMessage()
+        msg.set_content(message)
+        msg['Subject'] = subject
+        msg['From'] = "pipeline@company.com"    # Replace
+        msg['To'] = "your-email@company.com"    # Replace
+
+        # Configure your SMTP settings
+        smtp_server = "smtp.company.com"        # Replace
+        smtp_port = 587                         # Replace
+
+        with smtplib.SMTP(smtp_server, smtp_port) as server:
+            server.starttls()
+            # server.login('username', 'password')  # Uncomment if needed
+            server.send_message(msg)
+    except Exception as e:
+        print(f"Failed to send notification: {str(e)}")
+
+@task(retries=3, retry_delay_seconds=300)
 def process_layer(layer_name: str, transform_func, input_path: str, base_path: str) -> str:
-    """Generic task to process any ETL layer."""
+    """Generic task to process any ETL layer with error notification."""
     spark = create_spark_session(f"{layer_name.capitalize()}ETL")
     try:
         output_path = str(Path(base_path) / layer_name /
@@ -21,6 +42,12 @@ def process_layer(layer_name: str, transform_func, input_path: str, base_path: s
         print(f"Processed {row_count} rows in {layer_name} layer -> {output_path}")
 
         return output_path
+    except Exception as e:
+        send_notification(
+            subject=f"PaySim ETL Alert - {layer_name} Layer Failed",
+            message=f"Failed processing {layer_name} layer:\nError: {str(e)}\nInput path: {input_path}"
+        )
+        raise
     finally:
         stop_spark_session(spark)
 
