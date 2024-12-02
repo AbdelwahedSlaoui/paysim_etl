@@ -1,6 +1,8 @@
 from datetime import timedelta
 from paysim_flow import etl_pipeline
 
+raw_file_path = "data/raw/paysim_sample.csv"
+
 # Immediate execution of the pipeline
 if __name__ == "__main__":
     print("Starting ETL pipeline execution...")

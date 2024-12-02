@@ -4,6 +4,7 @@ import smtplib
 from email.message import EmailMessage
 from pathlib import Path
 
+from flows.deploy import raw_file_path
 from src.utils.spark_setup import create_spark_session, stop_spark_session
 from src.transformations.bronze import create_bronze_layer
 from src.transformations.silver import create_silver_layer
@@ -52,7 +53,7 @@ def process_layer(layer_name: str, transform_func, input_path: str, base_path: s
         stop_spark_session(spark)
 
 @flow
-def etl_pipeline(input_path: str = "data/raw/paysim_sample.csv") -> dict:
+def etl_pipeline(input_path: str = raw_file_path) -> dict: # Source
     """Execute the full ETL pipeline from raw data to gold layer."""
     start_time = datetime.now()
     base_path = str(Path("data").absolute())
