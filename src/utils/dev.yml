@@ -1,0 +1,10 @@
+paths:
+  input: "data/raw"
+
+validation:
+  enabled: true
+  fail_on_error: false
+
+security:
+  encryption_enabled: false
+  audit_logging: true

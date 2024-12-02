@@ -2,6 +2,8 @@
 prefect==3.1.4
 duckdb==0.9.2
 pyspark==3.4.0
+numpy==1.24.3
+pandas==2.0.3
 
 # Quality and testing
 great-expectations==0.17.23
