@@ -1,8 +1,9 @@
 import logging
-from pathlib import Path
-from datetime import datetime
 import sys
 import warnings
+from datetime import datetime
+from pathlib import Path
+
 
 def setup_logging(run_id: str = None) -> logging.Logger:
     """Configure logging with separate domains for business, Spark, and Prefect logs.
@@ -14,7 +15,7 @@ def setup_logging(run_id: str = None) -> logging.Logger:
         Logger: Configured business domain logger
     """
     # Basic setup
-    run_id = run_id or datetime.now().strftime('%Y%m%d_%H%M%S')
+    run_id = run_id or datetime.now().strftime("%Y%m%d_%H%M%S")
     log_dir = Path("logs") / run_id
     log_dir.mkdir(parents=True, exist_ok=True)
 
@@ -22,7 +23,7 @@ def setup_logging(run_id: str = None) -> logging.Logger:
     warnings.filterwarnings("ignore")
 
     # Common formatter
-    file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    file_formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
 
     def configure_logger(name: str, include_console: bool = False) -> logging.Logger:
         """Helper to configure individual loggers with consistent settings."""
@@ -38,7 +39,7 @@ def setup_logging(run_id: str = None) -> logging.Logger:
         # Optional console handler
         if include_console:
             console_handler = logging.StreamHandler(sys.stdout)
-            console_handler.setFormatter(logging.Formatter('%(message)s'))
+            console_handler.setFormatter(logging.Formatter("%(message)s"))
             logger.addHandler(console_handler)
 
         return logger
@@ -53,12 +54,10 @@ def setup_logging(run_id: str = None) -> logging.Logger:
         ("py4j", "spark"),
         ("pyspark", "spark"),
         ("prefect", "prefect"),
-        ("httpx", "prefect")
+        ("httpx", "prefect"),
     ]:
         framework_logger = logging.getLogger(framework)
         framework_logger.handlers.clear()
-        framework_logger.addHandler(
-            logging.FileHandler(log_dir / f"{target}.log")
-        )
+        framework_logger.addHandler(logging.FileHandler(log_dir / f"{target}.log"))
 
     return business_logger

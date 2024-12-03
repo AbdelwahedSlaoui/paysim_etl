@@ -1,5 +1,7 @@
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, when, abs as spark_abs
+from pyspark.sql.functions import abs as spark_abs
+from pyspark.sql.functions import col, when
+
 
 def create_silver_layer(spark: SparkSession, input_path: str, output_path: str) -> int:
     """Transform and validate transaction data for the silver layer.
@@ -24,29 +26,39 @@ def create_silver_layer(spark: SparkSession, input_path: str, output_path: str) 
 
     if invalid_records.count() > 0:
         type_counts = invalid_records.groupBy("type").count().collect()
-        error_details = "\n".join(f"- {row['type']}: {row['count']} records"
-                                for row in type_counts)
+        error_details = "\n".join(
+            f"- {row['type']}: {row['count']} records" for row in type_counts
+        )
         raise ValueError(f"Invalid transaction types found:\n{error_details}")
 
     # Apply balance validation rules
     df_validated = df.withColumn(
         "balance_check",
         when(
-            (col("type") == "PAYMENT") &
-            (spark_abs(col("oldbalanceOrg") - col("amount") - col("newbalanceOrig")) >
-             col("amount") * 0.01),
-            "payment_fee_exceeded"
-        ).when(
-            (col("type") == "TRANSFER") &
-            (spark_abs(col("oldbalanceOrg") - col("amount") - col("newbalanceOrig")) >
-             col("amount") * 0.02),
-            "transfer_fee_exceeded"
-        ).when(
-            (col("type") == "CASH_OUT") &
-            (spark_abs(col("oldbalanceOrg") - col("amount") - col("newbalanceOrig")) >
-             col("amount") * 0.03),
-            "cashout_fee_exceeded"
-        ).otherwise("valid")
+            (col("type") == "PAYMENT")
+            & (
+                spark_abs(col("oldbalanceOrg") - col("amount") - col("newbalanceOrig"))
+                > col("amount") * 0.01
+            ),
+            "payment_fee_exceeded",
+        )
+        .when(
+            (col("type") == "TRANSFER")
+            & (
+                spark_abs(col("oldbalanceOrg") - col("amount") - col("newbalanceOrig"))
+                > col("amount") * 0.02
+            ),
+            "transfer_fee_exceeded",
+        )
+        .when(
+            (col("type") == "CASH_OUT")
+            & (
+                spark_abs(col("oldbalanceOrg") - col("amount") - col("newbalanceOrig"))
+                > col("amount") * 0.03
+            ),
+            "cashout_fee_exceeded",
+        )
+        .otherwise("valid"),
     )
 
     # Log balance discrepancies if any
@@ -56,8 +68,8 @@ def create_silver_layer(spark: SparkSession, input_path: str, output_path: str) 
         discrepancies.groupBy("type", "balance_check").count().show()
 
     # Prepare final dataset
-    df_final = (df_validated
-        .drop("balance_check")
+    df_final = (
+        df_validated.drop("balance_check")
         .dropDuplicates()
         .na.fill(0, ["amount", "oldbalanceOrg", "newbalanceOrig"])
     )

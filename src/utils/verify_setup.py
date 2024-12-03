@@ -36,8 +36,8 @@ def verify_environment():
 
     # Testing & Quality Tools
     try:
-        import pytest
         import great_expectations as ge
+        import pytest
 
         results.append(
             f"✓ Testing tools (pytest {pytest.__version__}, great_expectations {ge.__version__})"
@@ -49,8 +49,8 @@ def verify_environment():
     try:
         import black
         import isort
-        import ruff
         import mypy
+        import ruff
 
         results.append("✓ Development tools (black, isort, ruff, mypy)")
     except ImportError as e:

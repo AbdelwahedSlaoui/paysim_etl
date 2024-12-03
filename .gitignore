@@ -30,6 +30,8 @@ wheels/
 env/
 venv/
 ENV/
+.mypy_cache
+.ruff_cache
 
 # Data directories
 data/raw/

@@ -1,33 +1,42 @@
 import pytest
-from pyspark.sql.types import StructType, StructField, StringType, DoubleType
+from pyspark.sql.types import DoubleType, StringType, StructField, StructType
+
 
 @pytest.fixture(scope="session")
 def spark():
     """Create a Spark session for testing."""
     from src.utils.spark_setup import create_spark_session
+
     spark = create_spark_session("TestSilverETL")
     yield spark
     spark.stop()
 
+
 @pytest.fixture
 def test_schema():
     """Define the test data schema."""
-    return StructType([
-        StructField("type", StringType(), True),
-        StructField("amount", DoubleType(), True),
-        StructField("oldbalanceOrg", DoubleType(), True),
-        StructField("newbalanceOrig", DoubleType(), True),
-    ])
+    return StructType(
+        [
+            StructField("type", StringType(), True),
+            StructField("amount", DoubleType(), True),
+            StructField("oldbalanceOrg", DoubleType(), True),
+            StructField("newbalanceOrig", DoubleType(), True),
+        ]
+    )
+
 
 @pytest.fixture
 def create_test_data(spark, test_schema, tmp_path):
     """Factory fixture to create test datasets."""
+
     def _create_data(records, name="test_data"):
         df = spark.createDataFrame(records, test_schema)
         path = f"{tmp_path}/{name}"
         df.write.mode("overwrite").parquet(path)
         return str(path)
+
     return _create_data
+
 
 def test_valid_transactions(spark, create_test_data):
     """Test silver layer processing with valid transaction data."""
@@ -36,7 +45,7 @@ def test_valid_transactions(spark, create_test_data):
     # Valid test cases
     valid_records = [
         ("PAYMENT", 100.0, 200.0, 100.0),  # Standard payment
-        ("TRANSFER", 200.0, 400.0, 200.0)  # Standard transfer
+        ("TRANSFER", 200.0, 400.0, 200.0),  # Standard transfer
     ]
 
     input_path = create_test_data(valid_records)
@@ -48,7 +57,11 @@ def test_valid_transactions(spark, create_test_data):
 
     assert row_count == 2
     assert result.count() == 2
-    assert set(result.select("type").distinct().toPandas()["type"]) == {"PAYMENT", "TRANSFER"}
+    assert set(result.select("type").distinct().toPandas()["type"]) == {
+        "PAYMENT",
+        "TRANSFER",
+    }
+
 
 def test_invalid_transactions(spark, create_test_data):
     """Test silver layer validation with invalid transaction data."""
@@ -57,7 +70,7 @@ def test_invalid_transactions(spark, create_test_data):
     # Invalid test cases
     invalid_records = [
         ("INVALID_TYPE", 100.0, 100.0, 50.0),
-        ("PAYMENT", -50.0, 200.0, 100.0)
+        ("PAYMENT", -50.0, 200.0, 100.0),
     ]
 
     input_path = create_test_data(invalid_records, "invalid_data")

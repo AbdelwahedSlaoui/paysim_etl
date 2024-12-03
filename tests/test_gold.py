@@ -1,13 +1,16 @@
 import pytest
-from pyspark.sql.types import StructType, StructField, StringType, DoubleType
+from pyspark.sql.types import DoubleType, StringType, StructField, StructType
+
 
 @pytest.fixture(scope="session")
 def spark():
     """Create test Spark session."""
     from src.utils.spark_setup import create_spark_session
+
     spark = create_spark_session("TestGoldETL")
     yield spark
     spark.stop()
+
 
 def test_create_gold_layer(spark, tmp_path):
     """Test gold layer aggregations with simple transaction data."""
@@ -20,12 +23,14 @@ def test_create_gold_layer(spark, tmp_path):
     ]
 
     # Basic schema for required fields
-    schema = StructType([
-        StructField("type", StringType(), True),
-        StructField("amount", DoubleType(), True),
-        StructField("oldbalanceOrg", DoubleType(), True),
-        StructField("newbalanceOrig", DoubleType(), True)
-    ])
+    schema = StructType(
+        [
+            StructField("type", StringType(), True),
+            StructField("amount", DoubleType(), True),
+            StructField("oldbalanceOrg", DoubleType(), True),
+            StructField("newbalanceOrig", DoubleType(), True),
+        ]
+    )
 
     # Process test data
     input_path = f"{tmp_path}/silver"

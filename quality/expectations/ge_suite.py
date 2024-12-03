@@ -1,6 +1,7 @@
 from great_expectations.core import ExpectationConfiguration, ExpectationSuite
 from great_expectations.dataset import SparkDFDataset
 
+
 def create_validation_suite() -> ExpectationSuite:
     """Create core validation expectations for transaction data."""
     suite = ExpectationSuite(expectation_suite_name="transaction_validation")
@@ -9,7 +10,7 @@ def create_validation_suite() -> ExpectationSuite:
     suite.add_expectation(
         ExpectationConfiguration(
             expectation_type="expect_column_values_to_not_be_null",
-            kwargs={"column": "type"}
+            kwargs={"column": "type"},
         )
     )
     suite.add_expectation(
@@ -17,8 +18,8 @@ def create_validation_suite() -> ExpectationSuite:
             expectation_type="expect_column_values_to_be_in_set",
             kwargs={
                 "column": "type",
-                "value_set": ["PAYMENT", "TRANSFER", "CASH_OUT", "CASH_IN", "DEBIT"]
-            }
+                "value_set": ["PAYMENT", "TRANSFER", "CASH_OUT", "CASH_IN", "DEBIT"],
+            },
         )
     )
 
@@ -26,27 +27,25 @@ def create_validation_suite() -> ExpectationSuite:
     suite.add_expectation(
         ExpectationConfiguration(
             expectation_type="expect_column_values_to_not_be_null",
-            kwargs={"column": "amount"}
+            kwargs={"column": "amount"},
         )
     )
     suite.add_expectation(
         ExpectationConfiguration(
             expectation_type="expect_column_values_to_be_between",
-            kwargs={
-                "column": "amount",
-                "min_value": 0,
-                "strict_min": True
-            }
+            kwargs={"column": "amount", "min_value": 0, "strict_min": True},
         )
     )
 
     return suite
 
+
 def validate_transaction_types(df) -> bool:
     """Validate transaction data types and amounts."""
-    return SparkDFDataset(df).validate(
-        expectation_suite=create_validation_suite()
-    ).success
+    return (
+        SparkDFDataset(df).validate(expectation_suite=create_validation_suite()).success
+    )
+
 
 def validate_balance_consistency(df) -> bool:
     """Validate transaction balance arithmetic for PAYMENT transactions."""
