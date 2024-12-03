@@ -1,19 +1,17 @@
 from great_expectations.core import ExpectationConfiguration, ExpectationSuite
 from great_expectations.dataset import SparkDFDataset
-from typing import List, Optional
 
-def create_transaction_suite(suite_name: str = "transaction_check") -> ExpectationSuite:
-    """Create an expectations suite for transaction validation with updated transaction types."""
-    suite = ExpectationSuite(expectation_suite_name=suite_name)
+def create_validation_suite() -> ExpectationSuite:
+    """Create core validation expectations for transaction data."""
+    suite = ExpectationSuite(expectation_suite_name="transaction_validation")
 
-    # Core data quality expectations with updated transaction types
+    # Transaction type validation
     suite.add_expectation(
         ExpectationConfiguration(
             expectation_type="expect_column_values_to_not_be_null",
             kwargs={"column": "type"}
         )
     )
-
     suite.add_expectation(
         ExpectationConfiguration(
             expectation_type="expect_column_values_to_be_in_set",
@@ -24,14 +22,13 @@ def create_transaction_suite(suite_name: str = "transaction_check") -> Expectati
         )
     )
 
-    # Numerical validation expectations
+    # Amount validation
     suite.add_expectation(
         ExpectationConfiguration(
             expectation_type="expect_column_values_to_not_be_null",
             kwargs={"column": "amount"}
         )
     )
-
     suite.add_expectation(
         ExpectationConfiguration(
             expectation_type="expect_column_values_to_be_between",
@@ -46,36 +43,20 @@ def create_transaction_suite(suite_name: str = "transaction_check") -> Expectati
     return suite
 
 def validate_transaction_types(df) -> bool:
-    """Validate financial transaction data against defined quality expectations."""
-    suite = create_transaction_suite()
-    ge_dataset = SparkDFDataset(df)
-    results = ge_dataset.validate(expectation_suite=suite)
-    return results.success
-
+    """Validate transaction data types and amounts."""
+    return SparkDFDataset(df).validate(
+        expectation_suite=create_validation_suite()
+    ).success
 
 def validate_balance_consistency(df) -> bool:
-    """
-    Validate balance calculations consistency in transactions.
-    For PAYMENT transactions, verifies that new balance = old balance - amount
-    """
-    ge_dataset = SparkDFDataset(df)
-
-    # First check that balance fields are not null
-    base_check = ge_dataset.expect_column_values_to_not_be_null("oldbalanceOrg").success and \
-                 ge_dataset.expect_column_values_to_not_be_null("newbalanceOrig").success
-
-    if not base_check:
-        return False
-
-    # For payment transactions, verify balance arithmetic
+    """Validate transaction balance arithmetic for PAYMENT transactions."""
     payment_df = df.filter(df.type == "PAYMENT")
-    if payment_df.count() > 0:
-        computed_balance = payment_df.select(
-            (payment_df.oldbalanceOrg - payment_df.amount).alias("computed_balance")
-        )
 
-        # Allow for small floating point differences
-        balance_diff = computed_balance.first().computed_balance - payment_df.first().newbalanceOrig
-        return abs(balance_diff) < 0.01
+    if payment_df.count() == 0:
+        return True
 
-    return True
+    row = payment_df.first()
+    expected_balance = row.oldbalanceOrg - row.amount
+
+    # Allow small floating-point differences (0.01 tolerance)
+    return abs(expected_balance - row.newbalanceOrig) < 0.01
