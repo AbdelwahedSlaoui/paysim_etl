@@ -1,40 +1,37 @@
-from pathlib import Path
 from pyspark.sql import SparkSession
 from pyspark.sql.types import (
-    StructType,
-    StructField,
-    StringType,
-    DoubleType,
-    IntegerType,
+    StructType, StructField, StringType, DoubleType, IntegerType
 )
 
-
 def create_bronze_layer(spark: SparkSession, input_path: str, output_path: str) -> int:
-    """Load CSV data into Parquet format with basic schema validation."""
-    schema = StructType(
-        [
-            StructField("step", IntegerType(), True),
-            StructField("type", StringType(), True),
-            StructField("amount", DoubleType(), True),
-            StructField("nameOrig", StringType(), True),
-            StructField("oldbalanceOrg", DoubleType(), True),
-            StructField("newbalanceOrig", DoubleType(), True),
-            StructField("nameDest", StringType(), True),
-            StructField("oldbalanceDest", DoubleType(), True),
-            StructField("newbalanceDest", DoubleType(), True),
-            StructField("isFraud", IntegerType(), True),
-            StructField("isFlaggedFraud", IntegerType(), True),
-        ]
-    )
+    """Load CSV transaction data into Parquet format with schema validation.
 
-    # Ensure paths are absolute
-    input_path = str(Path(input_path).absolute())
-    output_path = str(Path(output_path).absolute())
+    Args:
+        spark: Active SparkSession
+        input_path: Path to input CSV file
+        output_path: Path to write Parquet output
 
-    # Read with local file path
+    Returns:
+        int: Number of processed rows
+    """
+    schema = StructType([
+        StructField("step", IntegerType(), True),
+        StructField("type", StringType(), True),
+        StructField("amount", DoubleType(), True),
+        StructField("nameOrig", StringType(), True),
+        StructField("oldbalanceOrg", DoubleType(), True),
+        StructField("newbalanceOrig", DoubleType(), True),
+        StructField("nameDest", StringType(), True),
+        StructField("oldbalanceDest", DoubleType(), True),
+        StructField("newbalanceDest", DoubleType(), True),
+        StructField("isFraud", IntegerType(), True),
+        StructField("isFlaggedFraud", IntegerType(), True),
+    ])
+
+    # Read CSV with schema validation
     df = spark.read.option("header", "true").schema(schema).csv(f"file://{input_path}")
 
-    # Write with local file path
+    # Write to Parquet
     df.write.mode("overwrite").parquet(f"file://{output_path}")
 
     return df.count()
