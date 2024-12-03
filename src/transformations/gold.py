@@ -1,57 +1,50 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
-    sum, count, col, avg, round, percentile_approx,
-    when
+    sum, count, col, avg, round, when,
+    percentile_approx
 )
 
-
 def create_gold_layer(spark: SparkSession, input_path: str, output_path: str) -> int:
-    """Transform silver layer data into business-level aggregations.
-    The transformation creates an analytical view of behavioral patterns
-    """
-    # Read the input data
+    """Create business-level aggregations of transaction patterns."""
     df = spark.read.parquet(input_path)
 
-    # Enhanced behavioral analysis
-    df_behavior_analysis = df.groupBy("type").agg(
-        # Volume metrics
+    # Calculate core business metrics
+    metrics = df.groupBy("type").agg(
+        # Transaction volumes
         count("*").alias("transaction_count"),
         round(avg(col("amount") / 1000), 2).alias("avg_amount_k"),
-        round(sum(col("amount") / 1000000), 2).alias("total_volume_m"),
+        round(sum(col("amount")) / 1000000, 3).alias("total_volume_m"),
 
-        # Balance impact analysis
+        # Transaction patterns
+        round(percentile_approx("amount", 0.5) / 1000, 2).alias("median_amount_k"),
+
+        # Balance changes
         round(
             avg((col("newbalanceOrig") - col("oldbalanceOrg")) /
-                when(col("oldbalanceOrg") != 0, col("oldbalanceOrg")).otherwise(1) * 100),
+                when(col("oldbalanceOrg") != 0, col("oldbalanceOrg"))
+                .otherwise(1) * 100),
             2
         ).alias("avg_balance_change_pct"),
 
-        # Transaction size distribution
-        round(percentile_approx("amount", 0.5) / 1000, 2).alias("median_amount_k"),
-        round(percentile_approx("amount", 0.9) / 1000, 2).alias("large_txn_threshold_k"),
+        # Account patterns
+        sum(when(col("oldbalanceOrg") == 0, 1).otherwise(0))
+        .alias("zero_balance_count"),
 
-        # Account behavior patterns
-        sum(when(col("oldbalanceOrg") == 0, 1).otherwise(0)).alias("zero_balance_count"),
+        # Volume patterns
+        round(sum(col("amount")) / sum(col("oldbalanceOrg")), 4)
+        .alias("volume_to_balance_ratio"),
 
-        # ratio metrics
-        round(
-            avg(when(col("amount") > 10000, 1).otherwise(0)) * 100,
-            2
-        ).alias("large_txn_ratio_pct"),
-
-        # Relative balance impact
-        round(
-            sum(col("amount")) / sum(col("oldbalanceOrg")),
-            4
-        ).alias("volume_to_balance_ratio")
+        # Transaction size patterns
+        round(avg(when(col("amount") > 10000, 1).otherwise(0)) * 100, 2)
+        .alias("large_txn_ratio_pct")
     )
 
     # Add percentage distribution
-    total_transactions = df.count()
-    df_behavior_analysis = df_behavior_analysis.withColumn(
+    total_txns = df.count()
+    metrics = metrics.withColumn(
         "percentage_of_total",
-        round(col("transaction_count") / total_transactions * 100, 2)
+        round(col("transaction_count") / total_txns * 100, 2)
     )
 
-    df_behavior_analysis.write.mode("overwrite").parquet(f"{output_path}")
-    return df_behavior_analysis.count()  # Return count of analyzed transaction types
+    metrics.write.mode("overwrite").parquet(output_path)
+    return metrics.count()
