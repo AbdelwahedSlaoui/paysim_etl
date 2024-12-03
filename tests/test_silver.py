@@ -1,6 +1,5 @@
 import pytest
 from pyspark.sql.types import StructType, StructField, StringType, DoubleType
-from pyspark.sql.functions import col
 
 @pytest.fixture(scope="session")
 def spark():
@@ -11,67 +10,60 @@ def spark():
     spark.stop()
 
 @pytest.fixture
-def valid_input_data(spark, tmp_path):
-    """Create test data that passes all validations."""
-    df = spark.createDataFrame(
-        [
-            ("PAYMENT", 100.0, 200.0, 100.0),  # Valid record with correct balance
-            ("TRANSFER", 200.0, 400.0, 200.0),  # Another valid record
-        ],
-        StructType([
-            StructField("type", StringType(), True),
-            StructField("amount", DoubleType(), True),
-            StructField("oldbalanceOrg", DoubleType(), True),
-            StructField("newbalanceOrig", DoubleType(), True),
-        ])
-    )
-
-    path = f"{tmp_path}/bronze_valid"
-    df.write.mode("overwrite").parquet(path)
-    return str(path)
+def test_schema():
+    """Define the test data schema."""
+    return StructType([
+        StructField("type", StringType(), True),
+        StructField("amount", DoubleType(), True),
+        StructField("oldbalanceOrg", DoubleType(), True),
+        StructField("newbalanceOrig", DoubleType(), True),
+    ])
 
 @pytest.fixture
-def invalid_input_data(spark, tmp_path):
-    """Create test data with various validation issues."""
-    df = spark.createDataFrame(
-        [
-            ("INVALID_TYPE", 100.0, 100.0, 50.0),  # Invalid type
-            ("PAYMENT", -50.0, 200.0, 100.0),      # Negative amount
-        ],
-        StructType([
-            StructField("type", StringType(), True),
-            StructField("amount", DoubleType(), True),
-            StructField("oldbalanceOrg", DoubleType(), True),
-            StructField("newbalanceOrig", DoubleType(), True),
-        ])
-    )
+def create_test_data(spark, test_schema, tmp_path):
+    """Factory fixture to create test datasets."""
+    def _create_data(records, name="test_data"):
+        df = spark.createDataFrame(records, test_schema)
+        path = f"{tmp_path}/{name}"
+        df.write.mode("overwrite").parquet(path)
+        return str(path)
+    return _create_data
 
-    path = f"{tmp_path}/bronze_invalid"
-    df.write.mode("overwrite").parquet(path)
-    return str(path)
-
-def test_create_silver_layer_valid_data(spark, valid_input_data, tmp_path):
-    """Test silver layer creation with valid data."""
+def test_valid_transactions(spark, create_test_data):
+    """Test silver layer processing with valid transaction data."""
     from src.transformations.silver import create_silver_layer
 
-    output_path = f"{tmp_path}/silver"
-    row_count = create_silver_layer(spark, valid_input_data, output_path)
+    # Valid test cases
+    valid_records = [
+        ("PAYMENT", 100.0, 200.0, 100.0),  # Standard payment
+        ("TRANSFER", 200.0, 400.0, 200.0)  # Standard transfer
+    ]
 
+    input_path = create_test_data(valid_records)
+    output_path = f"{input_path}_output"
+
+    # Process and validate
+    row_count = create_silver_layer(spark, input_path, output_path)
     result = spark.read.parquet(output_path)
 
-    # Validate transformations
     assert row_count == 2
-    assert not result.filter(col("type").isNull()).count()
-    assert not result.filter(col("amount").isNull()).count()
-    assert all(col in result.columns for col in ["type", "amount", "oldbalanceOrg", "newbalanceOrig"])
+    assert result.count() == 2
+    assert set(result.select("type").distinct().toPandas()["type"]) == {"PAYMENT", "TRANSFER"}
 
-def test_create_silver_layer_invalid_data(spark, invalid_input_data, tmp_path):
-    """Test silver layer creation with invalid data."""
+def test_invalid_transactions(spark, create_test_data):
+    """Test silver layer validation with invalid transaction data."""
     from src.transformations.silver import create_silver_layer
 
-    output_path = f"{tmp_path}/silver"
+    # Invalid test cases
+    invalid_records = [
+        ("INVALID_TYPE", 100.0, 100.0, 50.0),
+        ("PAYMENT", -50.0, 200.0, 100.0)
+    ]
+
+    input_path = create_test_data(invalid_records, "invalid_data")
+    output_path = f"{input_path}_output"
 
     with pytest.raises(ValueError) as exc_info:
-        create_silver_layer(spark, invalid_input_data, output_path)
+        create_silver_layer(spark, input_path, output_path)
 
     assert "invalid transaction types" in str(exc_info.value).lower()
