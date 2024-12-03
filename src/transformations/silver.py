@@ -1,96 +1,80 @@
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import (
-    col, count, when, monotonically_increasing_id,
-    abs as spark_abs, sum as spark_sum, avg as spark_avg
-)
-from quality.expectations.ge_suite import validate_transaction_types
+from pyspark.sql.functions import abs as spark_abs
+from pyspark.sql.functions import col, when
+
 
 def create_silver_layer(spark: SparkSession, input_path: str, output_path: str) -> int:
-    """Transform bronze layer data with nuanced balance validation."""
+    """Transform and validate transaction data for the silver layer.
 
-    df = spark.read.option("mergeSchema", "true").parquet(input_path)
+    Args:
+        spark: Active Spark session
+        input_path: Location of input parquet files
+        output_path: Destination for validated data
 
-    # Transaction type validation (unchanged)
-    invalid_types = df.filter(~col("type").isin(
-        ["PAYMENT", "TRANSFER", "CASH_OUT", "CASH_IN", "DEBIT"]
-    )).count()
+    Returns:
+        int: Count of processed records
 
-    if invalid_types > 0:
-        type_distribution = df.filter(
-            ~col("type").isin(["PAYMENT", "TRANSFER", "CASH_OUT", "CASH_IN", "DEBIT"])
-        ).groupBy("type").count().collect()
+    Raises:
+        ValueError: If invalid transaction types are found
+    """
+    # Read input data
+    df = spark.read.parquet(input_path)
 
-        error_msg = f"Found {invalid_types} records with invalid transaction types:\n"
-        for row in type_distribution:
-            error_msg += f"Type: {row['type']}, Count: {row['count']}\n"
-        raise ValueError(error_msg)
+    # Validate transaction types
+    valid_types = ["PAYMENT", "TRANSFER", "CASH_OUT", "CASH_IN", "DEBIT"]
+    invalid_records = df.filter(~col("type").isin(valid_types))
 
-    # Process valid data
-    df_clean = (df
-        .dropDuplicates()
-        .repartition(8, "type")
-    )
-
-    # Enhanced balance consistency check with transaction-specific rules
-    balance_analysis = (df_clean.withColumn(
-        "balance_mismatch",
-        when(
-            # PAYMENT transactions: Allow for small fees (up to 1% of transaction)
-            (col("type") == "PAYMENT") &
-            (col("oldbalanceOrg") > 0) &
-            (spark_abs(col("oldbalanceOrg") - col("amount") - col("newbalanceOrig")) >
-             spark_abs(col("amount") * 0.01)),
-            "payment_mismatch"
-        ).when(
-            # TRANSFER: Allow for transfer fees (up to 2% of transaction)
-            (col("type") == "TRANSFER") &
-            (col("oldbalanceOrg") > 0) &
-            (spark_abs(col("oldbalanceOrg") - col("amount") - col("newbalanceOrig")) >
-             spark_abs(col("amount") * 0.02)),
-            "transfer_mismatch"
-        ).when(
-            # CASH_OUT: Most flexible due to potential service charges
-            (col("type") == "CASH_OUT") &
-            (col("oldbalanceOrg") > 0) &
-            (spark_abs(col("oldbalanceOrg") - col("amount") - col("newbalanceOrig")) >
-             spark_abs(col("amount") * 0.03)),
-            "cashout_mismatch"
-        ).otherwise("valid")
-    ))
-
-    # Collect and analyze inconsistencies
-    inconsistencies = (balance_analysis
-        .filter(col("balance_mismatch") != "valid")
-        .groupBy("type", "balance_mismatch")
-        .agg(
-            count("*").alias("mismatch_count"),
-            spark_avg(col("amount")).alias("avg_amount"),
-            spark_avg(
-                spark_abs(col("oldbalanceOrg") - col("amount") - col("newbalanceOrig"))
-            ).alias("avg_discrepancy")
+    if invalid_records.count() > 0:
+        type_counts = invalid_records.groupBy("type").count().collect()
+        error_details = "\n".join(
+            f"- {row['type']}: {row['count']} records" for row in type_counts
         )
-        .collect()
+        raise ValueError(f"Invalid transaction types found:\n{error_details}")
+
+    # Apply balance validation rules
+    df_validated = df.withColumn(
+        "balance_check",
+        when(
+            (col("type") == "PAYMENT")
+            & (
+                spark_abs(col("oldbalanceOrg") - col("amount") - col("newbalanceOrig"))
+                > col("amount") * 0.01
+            ),
+            "payment_fee_exceeded",
+        )
+        .when(
+            (col("type") == "TRANSFER")
+            & (
+                spark_abs(col("oldbalanceOrg") - col("amount") - col("newbalanceOrig"))
+                > col("amount") * 0.02
+            ),
+            "transfer_fee_exceeded",
+        )
+        .when(
+            (col("type") == "CASH_OUT")
+            & (
+                spark_abs(col("oldbalanceOrg") - col("amount") - col("newbalanceOrig"))
+                > col("amount") * 0.03
+            ),
+            "cashout_fee_exceeded",
+        )
+        .otherwise("valid"),
     )
 
-    if inconsistencies:
-        print("\nBalance Analysis Summary:")
-        for row in inconsistencies:
-            print(f"""
-Type: {row['type']}
-- Mismatch type: {row['balance_mismatch']}
-- Count: {row['mismatch_count']}
-- Average amount: {row['avg_amount']:.2f}
-- Average discrepancy: {row['avg_discrepancy']:.2f}
-""")
+    # Log balance discrepancies if any
+    discrepancies = df_validated.filter(col("balance_check") != "valid")
+    if discrepancies.count() > 0:
+        print("\nBalance Validation Summary:")
+        discrepancies.groupBy("type", "balance_check").count().show()
 
-    # Final transformations for valid data
-    df_final = (df_clean
+    # Prepare final dataset
+    df_final = (
+        df_validated.drop("balance_check")
+        .dropDuplicates()
         .na.fill(0, ["amount", "oldbalanceOrg", "newbalanceOrig"])
-        .repartition(8)
     )
 
-    df_final.write.mode("overwrite").option(
-        "maxRecordsPerFile", "500000"
-    ).parquet(output_path)
+    # Write output with optimized partitioning
+    df_final.write.mode("overwrite").parquet(output_path)
 
     return df_final.count()
