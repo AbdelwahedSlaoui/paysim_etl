@@ -7,53 +7,54 @@ from src.transformations.bronze import create_bronze_layer
 from src.transformations.silver import create_silver_layer
 from src.transformations.gold import create_gold_layer
 
-# Configuration
-RAW_FILE_PATH = "data/raw/paysim_kaggle.csv"
+class ETLPaths:
+    """Manage ETL paths and directories."""
+    def __init__(self, base_dir="data"):
+        self.base = Path(base_dir).absolute()
 
-@task(retries=3, retry_delay_seconds=300, log_prints=False)
-def process_layer(logger, layer_name: str, transform_func, input_path: str, base_path: str) -> str:
-    """Generic task to process any ETL layer."""
+    def layer_path(self, layer_name: str) -> str:
+        """Generate timestamped path for layer output."""
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        path = self.base / layer_name / timestamp
+        path.mkdir(parents=True, exist_ok=True)
+        return str(path)
+
+@task(retries=3, retry_delay_seconds=300)
+def process_layer(logger, layer_name: str, transform_func, input_path: str, paths: ETLPaths) -> str:
+    """Process a single ETL layer with error handling."""
     spark = create_spark_session(f"{layer_name.capitalize()}ETL")
     try:
-        output_path = str(Path(base_path) / layer_name /
-                         datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
-        Path(output_path).mkdir(parents=True, exist_ok=True)
+        output_path = paths.layer_path(layer_name)
+        logger.info(f"Processing {layer_name} layer...")
 
-        logger.info(f"Starting {layer_name} layer processing...")
         row_count = transform_func(spark, input_path, output_path)
-        logger.info(f"Processed {row_count:,} rows in {layer_name} layer -> {output_path}")
+        logger.info(f"Processed {row_count:,} rows -> {output_path}")
 
         return output_path
     finally:
         stop_spark_session(spark)
 
-@flow(log_prints=False)
-def paysim_pipeline(input_path: str = RAW_FILE_PATH) -> dict:
-    """Execute the full ETL pipeline with domain-separated logging."""
+@flow
+def paysim_pipeline(input_path: str = "data/raw/paysim_kaggle.csv") -> dict:
+    """Execute ETL pipeline with structured logging and error handling."""
     logger = setup_logging()
-    logger.info("Starting PaySim ETL pipeline execution...")
+    logger.info("Starting PaySim ETL pipeline...")
 
     start_time = datetime.now()
-    base_path = str(Path("data").absolute())
+    paths = ETLPaths()
     input_path = str(Path(input_path).absolute())
 
     try:
-        bronze_path = process_layer(logger, "bronze", create_bronze_layer, input_path, base_path)
-        silver_path = process_layer(logger, "silver", create_silver_layer, bronze_path, base_path)
-        gold_path = process_layer(logger, "gold", create_gold_layer, silver_path, base_path)
+        # Process each layer sequentially
+        bronze_path = process_layer(logger, "bronze", create_bronze_layer, input_path, paths)
+        silver_path = process_layer(logger, "silver", create_silver_layer, bronze_path, paths)
+        gold_path = process_layer(logger, "gold", create_gold_layer, silver_path, paths)
 
+        # Log completion information
         duration = datetime.now() - start_time
-        logger.info(f"\nPipeline completed in {duration}")
+        logger.info(f"Pipeline completed in {duration}")
 
-        logger.info("\nOutput locations:")
-        layers = {
-            "bronze": bronze_path,
-            "silver": silver_path,
-            "gold": gold_path
-        }
-        for layer, path in layers.items():
-            logger.info(f"{layer}: {path}")
-
+        # Return execution summary
         return {
             "bronze_path": bronze_path,
             "silver_path": silver_path,
@@ -65,7 +66,7 @@ def paysim_pipeline(input_path: str = RAW_FILE_PATH) -> dict:
         logger.error(f"Pipeline failed: {str(e)}")
         raise
     finally:
-        logger.info("Pipeline execution completed.")
+        logger.info("Pipeline execution completed")
 
 if __name__ == "__main__":
-    result = paysim_pipeline()
+    paysim_pipeline()
